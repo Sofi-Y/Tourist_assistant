@@ -9,6 +9,7 @@ from PIL import Image
 from googletrans import Translator
 from flask import Flask, render_template, redirect
 import argparse
+from io import BytesIO
 from flask_wtf import FlaskForm
 from wtforms import PasswordField, StringField, TextAreaField, SubmitField
 from wtforms.validators import DataRequired
@@ -75,62 +76,51 @@ class RegisterForm(FlaskForm):
     submit = SubmitField('Войти')
 
     
-# Предполагает запуск python3 main_project_file.py 23.727366,37.961127 2
-#parser = argparse.ArgumentParser(
-    # description="accepts args")
-#parser.add_argument("ll", help='Задайте координаты через запятую')
-#parser.add_argument("scale", help='Задайте масштаб (любые числа от 1.0 до 4.0)', default=1)
-#args = parser.parse_args()
+# Предполагает запуск python3 main_project_file.py Москва
+parser = argparse.ArgumentParser(
+    description="accepts args")
+parser.add_argument("toponym", help='Название объекта или адрес')
+args = parser.parse_args()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'yandexlyceum_secret_key'
 
 SCREEN_SIZE = [600, 450]
-ll = input('Задайте координаты через запятую:')
-scale = input('Задайте масштаб (любые числа от 1.0 до 4.0):')
-#  23.727366,37.961127
 
-#pytesseract.pytesseract.tesseract_cmd = 'C:\Program Files\Tesseract-OCR\tesseract.exe'
-IMG = 'map.png'
-TXT = ''
+toponym_to_find = toponym
 
+geocoder_api_server = "http://geocode-maps.yandex.ru/1.x/"
 
-class Example(QWidget):
-    def __init__(self, ll, scale):
-        super().__init__()
-        self.getImage()
-        self.initUI()
+geocoder_params = {
+    "apikey": "40d1649f-0493-4b70-98ba-98533de7710b",
+    "geocode": toponym_to_find,
+    "format": "json"}
 
-    def getImage(self):
-        map_request = f"http://static-maps.yandex.ru/1.x/?ll={ll}&scale={scale}&size=600,450&spn=0.002,0.002&l=map"
-        response = requests.get(map_request)
+response = requests.get(geocoder_api_server, params=geocoder_params)
 
-        if not response:
-            print("Ошибка выполнения запроса:")
-            print(map_request)
-            print("Http статус:", response.status_code, "(", response.reason, ")")
-            sys.exit(1)
-        self.map_file = "map.png"
-        with open(self.map_file, "wb") as file:
-            file.write(response.content)
-        # self.img = Image.open('map.png')
-        # self.res = pytesseract.image_to_string(self.img)
-        #self.p = Translator()
-        #self.p_translated = self.p.translate(self.res, dest='russian')
-        #self.translated = str(self.p_translated.text)
+if not response:
+    pass
 
-    def initUI(self):
-        self.setGeometry(100, 100, *SCREEN_SIZE)
-        self.setWindowTitle('Отображение карты')
-        # Изображение
-        self.pixmap = QPixmap(self.map_file)
-        self.image = QLabel(self)
-        self.image.move(0, 0)
-        #self.image.resize(600, 450)
-        self.image.setPixmap(self.pixmap)
+json_response = response.json()
+toponym = json_response["response"]["GeoObjectCollection"]["featureMember"][0]["GeoObject"]
+toponym_coodrinates = toponym["Point"]["pos"]
+toponym_longitude, toponym_lattitude = toponym_coodrinates.split(" ")
 
-    # def closeEvent(self, event):
-        # os.remove(self.map_file)
+delta = "0.005"
+
+map_params = {
+    "ll": ",".join([toponym_longitude, toponym_lattitude]),
+    "spn": ",".join([delta, delta]),
+    "l": "map"
+}
+
+map_api_server = "http://static-maps.yandex.ru/1.x/"
+response = requests.get(map_api_server, params=map_params)
+
+im = Image.open(BytesIO(
+    response.content))
+im.save('map.png')
+
 
 @app.route("/")
 def index():
@@ -174,8 +164,6 @@ def users():
         s.append(d)    
     return render_template("temp.html", base=s)
     
-    
-
 
 def main():
     global_init("users11.db")
