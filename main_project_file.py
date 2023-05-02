@@ -1,15 +1,16 @@
 import os
 import sys
 import requests
+import sqlite3
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel
 from PIL import Image
 # from pytesseract import pytesseract
 from googletrans import Translator
-from flask import Flask, render_template
+from flask import Flask, render_template, redirect
 import argparse
 from flask_wtf import FlaskForm
-from wtforms import PasswordField, StringField, TextAreaField, SubmitField, EmailField
+from wtforms import PasswordField, StringField, TextAreaField, SubmitField
 from wtforms.validators import DataRequired
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlalchemy
@@ -22,7 +23,7 @@ from flask import Flask, redirect, render_template
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'yandexlyceum_secret_key'
 
-# http://127.0.0.1:5000/register
+# http://127.0.0.1:5000/reg
 SqlAlchemyBase = dec.declarative_base()
 
 __factory = None
@@ -45,7 +46,8 @@ def create_session() -> Session:
     return __factory()
 
 
-global_init("users1.db")
+# global_init("users1.db")
+
 
 class User(SqlAlchemyBase):
     __tablename__ = 'users'
@@ -54,8 +56,6 @@ class User(SqlAlchemyBase):
                            primary_key=True, autoincrement=True)
     name = sqlalchemy.Column(sqlalchemy.String, nullable=True)
     about = sqlalchemy.Column(sqlalchemy.String, nullable=True)
-    email = sqlalchemy.Column(sqlalchemy.String,
-                              index=True, nullable=True)
     hashed_password = sqlalchemy.Column(sqlalchemy.String, nullable=True)
     created_date = sqlalchemy.Column(sqlalchemy.DateTime,
                                      default=datetime.datetime.now)
@@ -68,7 +68,6 @@ class User(SqlAlchemyBase):
 
 
 class RegisterForm(FlaskForm):
-    email = EmailField('Почта', validators=[DataRequired()])
     password = PasswordField('Пароль', validators=[DataRequired()])
     password_again = PasswordField('Повторите пароль', validators=[DataRequired()])
     name = StringField('Имя пользователя', validators=[DataRequired()])
@@ -77,23 +76,23 @@ class RegisterForm(FlaskForm):
 
     
 # Предполагает запуск python3 main_project_file.py 23.727366,37.961127 2
-parser = argparse.ArgumentParser(
-    description="accepts args")
-parser.add_argument("ll", help='Задайте координаты через запятую')
-parser.add_argument("scale", help='Задайте масштаб (любые числа от 1.0 до 4.0)', default=1)
-args = parser.parse_args()
+#parser = argparse.ArgumentParser(
+    # description="accepts args")
+#parser.add_argument("ll", help='Задайте координаты через запятую')
+#parser.add_argument("scale", help='Задайте масштаб (любые числа от 1.0 до 4.0)', default=1)
+#args = parser.parse_args()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'yandexlyceum_secret_key'
 
 SCREEN_SIZE = [600, 450]
-# ll = input('Задайте координаты через запятую:')
-# scale = input('Задайте масштаб (любые числа от 1.0 до 4.0):')
+ll = input('Задайте координаты через запятую:')
+scale = input('Задайте масштаб (любые числа от 1.0 до 4.0):')
 #  23.727366,37.961127
 
 #pytesseract.pytesseract.tesseract_cmd = 'C:\Program Files\Tesseract-OCR\tesseract.exe'
 IMG = 'map.png'
-
+TXT = ''
 
 
 class Example(QWidget):
@@ -135,40 +134,57 @@ class Example(QWidget):
 
 @app.route("/")
 def index():
-    return render_template("project_template.html")
+    return render_template("project_template.html", txt=TXT)
 
 
-@app.route("/reg")
+@app.route('/reg', methods=['GET', 'POST'])
 def reg():
     form = RegisterForm()
     if form.validate_on_submit():
         if form.password.data != form.password_again.data:
-            return render_template('project_reg_form.html', title='Регистрация',
-                                   form=form,
+            return render_template('reg1.html', title='Регистрация', form=form,
                                    message="Пароли не совпадают")
-        db_sess = db_session.create_session()
-        if db_sess.query(User).filter(User.email == form.email.data).first():
-            return render_template('project_reg_form.html', title='Регистрация', form=form,
-                                   message="Такой пользователь уже есть")
+        session = create_session()
+        # if session.query(User).filter(User.email == form.email.data).first():
+            # return render_template('register.html', title='Регистрация', form=form,
+                                   # message="Такой пользователь уже есть")
         user = User(
             name=form.name.data,
-            email=form.email.data,
-            about=form.about.data
-        )
+            about=form.about.data)
         user.set_password(form.password.data)
-        db_sess.add(user)
-        db_sess.commit()
-        return redirect('/index')
-    return render_template('project_reg_form.html', title='Регистрация', form=form)
+        session.add(user)
+        session.commit()
+        return redirect('/users')
+    return render_template('reg1.html', title='Регистрация', form=form)
+
+
+@app.route('/users')
+def users():
+    con = sqlite3.connect("users11.db")
+    cur = con.cursor()
+    res = cur.execute("""SELECT * FROM users""").fetchall()
+    s = []
+    for x in res:
+        d = dict()
+        d['id'] = x[0]
+        d['name'] = x[1]
+        d['about'] = x[2]
+        d['hashed_password'] = x[3]
+        d['created_date'] = x[4]
+        s.append(d)    
+    return render_template("temp.html", base=s)
+    
+    
 
 
 def main():
+    global_init("users11.db")
     app.run(port=8080, host='127.0.0.1')
-        
-        
+
+
 if __name__ == '__main__':
     app1 = QApplication(sys.argv)
     ex = Example(ll, scale)
-    ex.show()
+    # ex.show()
     main()
     sys.exit(app1.exec())
